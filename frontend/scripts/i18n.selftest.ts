@@ -131,6 +131,46 @@ const rr = ws2.resumes[0];
 assert.deepStrictEqual(rr.i18n.languages.map((l) => l.code), [ZH, EN]);
 ok('v2 备份恢复：语言列表与字段保持一致');
 
+// 11. 列表被显式清空后保持为空，不回退显示源语言条目
+let listField = setLocalList(undefined, EN, ZH, ['A', 'B']);
+listField = setLocalList(listField, EN, ZH, []); // 译者明确清空
+const resolvedEmpty = getLocalList(listField, EN, ZH);
+assert.deepStrictEqual(resolvedEmpty.value, [], '清空后取值为空数组');
+assert.strictEqual(resolvedEmpty.isFallback, false, '清空不是回退态');
+assert.deepStrictEqual(getLocalList(listField, ZH, ZH).value, [], '源语言本就为空');
+
+// 源语言随后补充了内容，已清空的英文版本仍保持为空且被视为「已翻译」
+listField = setSourceList(listField, ZH, ['源条目一', '源条目二'], [ZH, EN]);
+const afterSourceChange = getLocalList(listField, EN, ZH);
+assert.deepStrictEqual(afterSourceChange.value, [], '原文变化后已清空版本仍为空，不回退');
+assert.strictEqual(afterSourceChange.isFallback, false, '已清空版本不被当成未翻译');
+assert.strictEqual(afterSourceChange.isStale, true, '作为已维护译文，原文变化标记待复核');
+
+// 从未翻译的新语言仍正常回退原文
+const jaResolved = getLocalList(listField, 'ja', ZH);
+assert.deepStrictEqual(jaResolved.value, ['源条目一', '源条目二']);
+assert.strictEqual(jaResolved.isFallback, true);
+ok('空列表：显式清空保持为空、不回退、原文变化按已翻译处理');
+
+// 12. 标量文本同样遵守显式清空语义
+let textField = setLocal(undefined, EN, ZH, 'English');
+textField = setLocal(textField, EN, ZH, '');
+assert.strictEqual(getLocal(textField, EN, ZH).value, '');
+assert.strictEqual(getLocal(textField, EN, ZH).isFallback, false);
+textField = setSource(textField, ZH, '新的原文', [ZH, EN]);
+assert.strictEqual(getLocal(textField, EN, ZH).value, '', '已清空译文不回退原文');
+assert.strictEqual(getLocal(textField, EN, ZH).isStale, true, '清空的译文仍参与待复核');
+assert.strictEqual(getLocal(textField, 'ja', ZH).value, '新的原文', '未翻译语言回退新原文');
+ok('空文本：显式清空保持为空并参与待复核，未翻译语言仍回退');
+
+// 13. 移出正在使用的语言后，回退到仍然存在的语言（源语言恒存在）
+function resolveExistingLang(selected: string, codes: string[], sourceLang: string): string {
+  return codes.includes(selected) ? selected : sourceLang;
+}
+assert.strictEqual(resolveExistingLang(EN, [ZH], ZH), ZH, '英文被移出 -> 回退源语言');
+assert.strictEqual(resolveExistingLang(EN, [ZH, EN], ZH), EN, '语言仍存在 -> 保持选择');
+ok('移出当前导出语言时回退到现存语言');
+
 function v2Shape(resume: Resume) {
   return JSON.parse(JSON.stringify(resume));
 }

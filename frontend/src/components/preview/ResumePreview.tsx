@@ -41,17 +41,30 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
 
   const t = (field: Parameters<typeof getLocal>[0]) => getLocal(field, currentLang, source).value;
   const tl = (field: Parameters<typeof getLocalList>[0]) => getLocalList(field, currentLang, source).value;
+  // 仅当简历字段在当前语言「缺失译文（回退态）」时才回退到全局资料；
+  // 显式清空的字段保持空白，不被全局资料填充。
+  const tr = (field: Parameters<typeof getLocal>[0], profileField: Parameters<typeof getLocal>[0]) => {
+    const resolved = getLocal(field, currentLang, source);
+    const hasCurrentKey =
+      (field && typeof field === 'object' && Object.prototype.hasOwnProperty.call(field.values ?? {}, currentLang)) ||
+      typeof field === 'string';
+    // 当前语言有译文键（含显式清空）时以简历为准；否则沿用旧逻辑：简历自身内容为空才回退全局资料。
+    if (hasCurrentKey) {
+      return resolved.value;
+    }
+    return resolved.value || getLocal(profileField, currentLang, source).value;
+  };
 
   const info = {
     fullName: resume.basicInfo.fullName || profile.fullName,
-    headline: t(resume.basicInfo.headline) || t(profile.headline),
+    headline: tr(resume.basicInfo.headline, profile.headline),
     phone: resume.basicInfo.phone || profile.phone,
     email: resume.basicInfo.email || profile.email,
-    location: t(resume.basicInfo.location) || t(profile.location),
+    location: tr(resume.basicInfo.location, profile.location),
     website: resume.basicInfo.website || profile.website,
     avatarUrl: resume.basicInfo.avatarUrl || profile.avatarUrl,
   };
-  const summary = t(resume.summary) || t(profile.summary);
+  const summary = tr(resume.summary, profile.summary);
   const enabledSections = resume.sections.filter((section) => section.enabled);
   const style = {
     '--template-accent': template.accent,

@@ -32,6 +32,12 @@ export interface ResolvedList {
 
 const hasText = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
 const hasList = (value: unknown): value is string[] => Array.isArray(value) && value.some((item) => typeof item === 'string' && item.trim().length > 0);
+// 「该语言已有译文（含显式清空）」以键存在为准：空字符串 / 空数组也是明确的翻译结果，
+// 不能因为内容为空就回退到原文或被当成未翻译。返回 undefined 表示该语言尚无译文键。
+const ownTextValue = (values: Partial<Record<LangCode, string>>, lang: LangCode): string | undefined =>
+  Object.prototype.hasOwnProperty.call(values, lang) && typeof values[lang] === 'string' ? values[lang] : undefined;
+const ownListValue = (values: Partial<Record<LangCode, string[]>>, lang: LangCode): string[] | undefined =>
+  Object.prototype.hasOwnProperty.call(values, lang) && Array.isArray(values[lang]) ? values[lang] : undefined;
 
 function tidyStale(stale: Record<LangCode, true | undefined>): LocalText['stale'] {
   const entries = Object.entries(stale).filter(([, flag]) => flag === true) as [LangCode, true][];
@@ -64,15 +70,17 @@ export function getLocal(field: LocalField | null | undefined, lang: LangCode, s
   if (!field) {
     return { value: '', isFallback: true, isStale: false };
   }
-  const own = field.values?.[lang];
-  if (hasText(own)) {
+  const values = field.values ?? {};
+  // 键存在即视为该语言已有翻译：显式清空的字段保持为空，不回退原文。
+  const own = ownTextValue(values, lang);
+  if (own !== undefined) {
     return { value: own, isFallback: false, isStale: field.stale?.[lang] === true };
   }
-  const origin = field.values?.[source];
-  if (hasText(origin)) {
+  const origin = values[source];
+  if (typeof origin === 'string') {
     return { value: origin, isFallback: lang !== source, isStale: false };
   }
-  return { value: own ?? '', isFallback: false, isStale: field.stale?.[lang] === true };
+  return { value: '', isFallback: false, isStale: field.stale?.[lang] === true };
 }
 
 export function getLocalList(field: LocalListField | null | undefined, lang: LangCode, source: LangCode): ResolvedList {
@@ -82,15 +90,17 @@ export function getLocalList(field: LocalListField | null | undefined, lang: Lan
   if (!field) {
     return { value: [], isFallback: true, isStale: false };
   }
-  const own = field.values?.[lang];
-  if (hasList(own)) {
+  const values = field.values ?? {};
+  // 键存在即视为该语言已有翻译：被清空的列表保持为空数组，不回退显示源语言条目。
+  const own = ownListValue(values, lang);
+  if (own !== undefined) {
     return { value: own, isFallback: false, isStale: field.stale?.[lang] === true };
   }
-  const origin = field.values?.[source];
-  if (hasList(origin)) {
+  const origin = values[source];
+  if (Array.isArray(origin)) {
     return { value: origin, isFallback: lang !== source, isStale: false };
   }
-  return { value: own ?? [], isFallback: false, isStale: field.stale?.[lang] === true };
+  return { value: [], isFallback: false, isStale: field.stale?.[lang] === true };
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +134,8 @@ export function setSource(field: LocalField | null | undefined, source: LangCode
     if (lang === source) {
       continue;
     }
-    if (hasText(values[lang])) {
+    // 键存在即代表该语言维护过译文（即使被显式清空），原文变化时同样需要复核。
+    if (ownTextValue(values, lang) !== undefined) {
       stale[lang] = true;
     } else {
       delete stale[lang];
@@ -141,7 +152,7 @@ export function setSourceList(field: LocalListField | null | undefined, source: 
     if (lang === source) {
       continue;
     }
-    if (hasList(values[lang])) {
+    if (ownListValue(values, lang) !== undefined) {
       stale[lang] = true;
     } else {
       delete stale[lang];
@@ -150,10 +161,10 @@ export function setSourceList(field: LocalListField | null | undefined, source: 
   return { values, stale: tidyStale(stale) };
 }
 
-/** 复制现有语言内容为新语言起步；目标语言已有译文时不覆盖。 */
+/** 复制现有语言内容为新语言起步；目标语言已有译文键（含显式清空）时不覆盖。 */
 export function seedField(field: LocalField | null | undefined, from: LangCode, to: LangCode, source: LangCode): LocalField {
   const next = asText(field, source);
-  if (hasText(next.values[to])) {
+  if (ownTextValue(next.values, to) !== undefined) {
     return field ?? next;
   }
   const resolved = getLocal(field, from, source);
@@ -165,7 +176,7 @@ export function seedField(field: LocalField | null | undefined, from: LangCode, 
 
 export function seedListField(field: LocalListField | null | undefined, from: LangCode, to: LangCode, source: LangCode): LocalListField {
   const next = asList(field, source);
-  if (hasList(next.values[to])) {
+  if (ownListValue(next.values, to) !== undefined) {
     return field ?? next;
   }
   const resolved = getLocalList(field, from, source);

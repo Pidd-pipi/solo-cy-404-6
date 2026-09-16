@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { EmptyState } from '../components/common/EmptyState';
@@ -8,6 +8,7 @@ import { useExportPdf } from '../hooks/useExportPdf';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useResumeStore } from '../stores/resume';
 import { getLocal } from '../utils/i18n';
+import { readStorage } from '../utils/storage';
 
 export function ExportPreview() {
   const { id } = useParams();
@@ -15,21 +16,35 @@ export function ExportPreview() {
   const resume = useResumeStore((state) => state.resumes.find((item) => item.id === id));
   const [margin, setMargin] = useLocalStorage('smart-resume:export-margin', 14);
   const [fontSize, setFontSize] = useLocalStorage('smart-resume:export-font-size', 12);
-  const [storedLang, setStoredLang] = useLocalStorage<string>(`smart-resume:export-lang:${id}`, resume?.i18n.sourceLanguage ?? 'zh-CN');
+
+  const source = resume?.i18n.sourceLanguage ?? 'zh-CN';
+  // 首次进入导出：沿用编辑页停留的语言；之后导出语言独立记忆，不回写编辑页选择。
+  const editorLang = readStorage<string | null>(`smart-resume:working-lang:${id}`, null);
+  const [storedLang, setStoredLang] = useLocalStorage<string>(
+    `smart-resume:export-lang:${id}`,
+    editorLang ?? source,
+  );
   const { exportPdf, isExporting, error } = useExportPdf(previewRef);
 
   const lang = useMemo(() => {
     if (!resume) {
       return storedLang;
     }
-    return resume.i18n.languages.some((item) => item.code === storedLang) ? storedLang : resume.i18n.sourceLanguage;
-  }, [resume, storedLang]);
+    // 正在导出的语言被移出时，回退到仍然存在的语言（源语言始终存在）。
+    return resume.i18n.languages.some((item) => item.code === storedLang) ? storedLang : source;
+  }, [resume, storedLang, source]);
+
+  // 回退后把导出选择同步为现存语言，避免残留已删除的语言码。
+  useEffect(() => {
+    if (lang !== storedLang) {
+      setStoredLang(lang);
+    }
+  }, [lang, storedLang, setStoredLang]);
 
   if (!resume) {
     return <EmptyState title="无法导出" description="没有找到这份简历，可能已被删除。" />;
   }
 
-  const source = resume.i18n.sourceLanguage;
   const titleText = getLocal(resume.title, lang, source).value || 'resume';
   const safeFileTitle = titleText.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'resume';
 
