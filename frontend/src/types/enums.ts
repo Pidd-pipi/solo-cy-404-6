@@ -44,3 +44,27 @@ export const skillCategoryLabels: Record<SkillCategory, string> = {
   [SkillCategory.Soft]: '软技能',
 };
 
+// 枚举值本身是跨语言共享的结构信息，这里仅提供英文显示标签，
+// 预览时非中文语言统一回退到英文。
+export const skillLevelLabelsEn: Record<SkillLevel, string> = {
+  [SkillLevel.Beginner]: 'Beginner',
+  [SkillLevel.Elementary]: 'Elementary',
+  [SkillLevel.Intermediate]: 'Intermediate',
+  [SkillLevel.Advanced]: 'Advanced',
+  [SkillLevel.Expert]: 'Expert',
+};
+
+export const educationLevelLabelsEn: Record<EducationLevel, string> = {
+  [EducationLevel.HighSchool]: 'High School',
+  [EducationLevel.Associate]: 'Associate',
+  [EducationLevel.Bachelor]: 'Bachelor',
+  [EducationLevel.Master]: 'Master',
+  [EducationLevel.Doctor]: 'Doctor',
+};
+
+export const skillCategoryLabelsEn: Record<SkillCategory, string> = {
+  [SkillCategory.Technology]: 'Technology',
+  [SkillCategory.Language]: 'Language',
+  [SkillCategory.Soft]: 'Soft Skills',
+};
+

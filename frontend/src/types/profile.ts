@@ -1,12 +1,14 @@
+import { LocalField } from './i18n';
+
 export interface Profile {
+  // 姓名与联系方式为跨语言共享的结构信息
   fullName: string;
-  headline: string;
+  headline: LocalField;
   phone: string;
   email: string;
-  location: string;
+  location: LocalField;
   website: string;
   avatarUrl: string;
-  targetRole: string;
-  summary: string;
+  targetRole: LocalField;
+  summary: LocalField;
 }
-

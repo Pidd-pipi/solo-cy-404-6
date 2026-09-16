@@ -7,6 +7,7 @@ import { EmptyState } from '../components/common/EmptyState';
 import { ResumeCard } from '../components/common/ResumeCard';
 import { defaultProfile } from '../stores/profile';
 import { useResumeStore } from '../stores/resume';
+import { migrateWorkspaceSnapshot } from '../utils/migration';
 import { downloadJson, readJsonFile } from '../utils/storage';
 
 export function ResumeList() {
@@ -31,7 +32,10 @@ export function ResumeList() {
     if (!file) {
       return;
     }
-    const snapshot = await readJsonFile<WorkspaceSnapshot>(file);
+    const raw = await readJsonFile<unknown>(file);
+    // 旧备份（无 version / 单语言）经迁移后同样可正常打开
+    const snapshot = migrateWorkspaceSnapshot(raw) as WorkspaceSnapshot;
+    snapshot.exportedAt = new Date().toISOString();
     writeWorkspaceSnapshot(snapshot);
     window.location.reload();
   };

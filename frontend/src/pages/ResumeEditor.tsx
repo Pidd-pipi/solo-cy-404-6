@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Download, LayoutTemplate, UserRound } from 'lucide-react';
 import { BasicInfoPanel } from '../components/editor/BasicInfoPanel';
+import { LanguageSwitcher } from '../components/editor/LanguageSwitcher';
 import { ModuleSidebar } from '../components/editor/ModuleSidebar';
 import { Button } from '../components/common/Button';
 import { EmptyState } from '../components/common/EmptyState';
@@ -10,6 +11,9 @@ import { ResumePreview } from '../components/preview/ResumePreview';
 import { useProfileStore } from '../stores/profile';
 import { useResumeStore } from '../stores/resume';
 import { templates } from '../stores/template';
+import { getLocal, setLocal, setSource } from '../utils/i18n';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import type { LangCode, LocalField } from '../types/i18n';
 import { ResumeSection, ResumeSectionType } from '../types/resume';
 
 export function ResumeEditor() {
@@ -21,8 +25,23 @@ export function ResumeEditor() {
   const reorderSections = useResumeStore((state) => state.reorderSections);
   const toggleSection = useResumeStore((state) => state.toggleSection);
   const setActiveResume = useResumeStore((state) => state.setActiveResume);
+  const addLanguage = useResumeStore((state) => state.addLanguage);
+  const removeLanguage = useResumeStore((state) => state.removeLanguage);
+  const approveLanguage = useResumeStore((state) => state.approveLanguage);
   const profile = useProfileStore((state) => state.profile);
   const resume = useMemo(() => resumes.find((item) => item.id === id), [id, resumes]);
+
+  const source = resume?.i18n.sourceLanguage ?? 'zh-CN';
+  const languageCodes = resume?.i18n.languages.map((item) => item.code) ?? [source];
+  const [storedLang, setStoredLang] = useLocalStorage<string>(`smart-resume:working-lang:${id}`, source);
+  // 当前语言若已被移出则回落到源语言
+  const lang = languageCodes.includes(storedLang) ? storedLang : source;
+
+  useEffect(() => {
+    if (resume) {
+      setActiveResume(resume.id);
+    }
+  }, [resume, setActiveResume]);
 
   if (!resume) {
     return (
@@ -35,11 +54,7 @@ export function ResumeEditor() {
     );
   }
 
-  useEffect(() => {
-    if (resume) {
-      setActiveResume(resume.id);
-    }
-  }, [resume, setActiveResume]);
+  const selectLang = (next: string) => setStoredLang(next);
 
   const handleSorted = (sections: ResumeSection[]) => {
     reorderSections(
@@ -48,18 +63,30 @@ export function ResumeEditor() {
     );
   };
 
+  const writeField = (field: LocalField, value: string): LocalField =>
+    // 源语言走 setSource（触发其它语言待复核），其它语言走 setLocal
+    lang === source
+      ? setSource(field, source, value, languageCodes)
+      : setLocal(field, lang, source, value);
+
   const syncProfile = () => {
+    // 结构字段直接同步；可翻译字段写入当前语言
     updateBasicInfo(resume.id, {
       fullName: profile.fullName,
-      headline: profile.headline,
       phone: profile.phone,
       email: profile.email,
-      location: profile.location,
       website: profile.website,
       avatarUrl: profile.avatarUrl,
+      headline: writeField(
+        resume.basicInfo.headline,
+        getLocal(profile.headline, lang, source).value,
+      ),
+      location: writeField(resume.basicInfo.location, getLocal(profile.location, lang, source).value),
     });
-    updateResume(resume.id, { summary: profile.summary });
+    updateResume(resume.id, { summary: writeField(resume.summary, getLocal(profile.summary, lang, source).value) });
   };
+
+  const titleResolved = getLocal(resume.title, lang, source);
 
   return (
     <div>
@@ -68,11 +95,18 @@ export function ResumeEditor() {
           <p className="text-sm font-semibold uppercase text-[var(--accent-strong)]">Live editor</p>
           <input
             className="mt-2 w-full bg-transparent font-display text-4xl font-semibold outline-none"
-            value={resume.title}
+            value={
+              resume.title && typeof resume.title === 'object'
+                ? resume.title.values[lang] ?? (lang === source ? resume.title.values[source] ?? '' : '')
+                : lang === source
+                  ? (resume.title as string) ?? ''
+                  : ''
+            }
             aria-label="简历标题"
-            onChange={(event) => updateResume(resume.id, { title: event.target.value })}
+            placeholder={lang !== source && titleResolved.isFallback ? titleResolved.value : undefined}
+            onChange={(event) => updateResume(resume.id, { title: writeField(resume.title, event.target.value) })}
           />
-          <p className="mt-2 text-sm text-[var(--muted)]">左侧模块拖拽排序，中间编辑内容，右侧实时预览。</p>
+          <p className="mt-2 text-sm text-[var(--muted)]">左侧模块拖拽排序，中间按当前语言编辑，右侧实时预览。结构信息全语言共享。</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
@@ -105,20 +139,47 @@ export function ResumeEditor() {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-5 xl:grid-cols-[280px_minmax(420px,1fr)_440px]">
+      <div className="mt-5">
+        <LanguageSwitcher
+          resume={resume}
+          lang={lang}
+          onSelect={selectLang}
+          onAdd={(variant, copyFrom) => {
+            addLanguage(resume.id, variant, copyFrom);
+            setStoredLang(variant.code);
+          }}
+          onRemove={(target) => {
+            removeLanguage(resume.id, target);
+            if (target === lang) {
+              setStoredLang(source);
+            }
+          }}
+          onApproveAll={(target) => approveLanguage(resume.id, target)}
+        />
+      </div>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-[280px_minmax(420px,1fr)_440px]">
         <ModuleSidebar
           activeSectionId={activeSectionId}
           onSelect={setActiveSectionId}
           onSorted={handleSorted}
           onToggle={(sectionId) => toggleSection(resume.id, sectionId)}
           sections={resume.sections}
+          lang={lang}
+          source={source}
         />
         <div className="space-y-5">
-          <BasicInfoPanel value={resume.basicInfo} onChange={(patch) => updateBasicInfo(resume.id, patch)} />
-          <SectionEditor resume={resume} sectionId={activeSectionId} onChange={(patch) => updateResume(resume.id, patch)} />
+          <BasicInfoPanel
+            value={resume.basicInfo}
+            lang={lang}
+            source={source}
+            languages={languageCodes}
+            onChange={(patch) => updateBasicInfo(resume.id, patch)}
+          />
+          <SectionEditor resume={resume} sectionId={activeSectionId} lang={lang} onChange={(patch) => updateResume(resume.id, patch)} />
         </div>
         <aside className="max-h-[calc(100vh-140px)] overflow-auto border border-[var(--border)] bg-[var(--surface-alt)] p-4">
-          <ResumePreview resume={resume} fontSize={10} />
+          <ResumePreview resume={resume} lang={lang} fontSize={10} />
         </aside>
       </div>
     </div>

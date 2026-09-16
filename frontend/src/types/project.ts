@@ -1,11 +1,13 @@
+import { LocalField, LocalListField } from './i18n';
+
 export interface Project {
   id: string;
-  name: string;
-  role: string;
+  name: LocalField;
+  role: LocalField;
+  // 日期为跨语言共享的结构信息
   startDate: string;
   endDate: string;
-  techStack: string[];
-  description: string;
-  outcomes: string[];
+  techStack: LocalListField;
+  description: LocalField;
+  outcomes: LocalListField;
 }
-

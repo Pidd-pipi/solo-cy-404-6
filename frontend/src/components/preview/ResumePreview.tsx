@@ -1,14 +1,28 @@
 import { CSSProperties } from 'react';
 import { useProfileStore } from '../../stores/profile';
 import { getTemplateById, ResumeTemplate } from '../../stores/template';
-import { educationLevelLabels, skillCategoryLabels, skillLevelLabels } from '../../types/enums';
+import {
+  educationLevelLabels,
+  educationLevelLabelsEn,
+  skillCategoryLabels,
+  skillCategoryLabelsEn,
+  skillLevelLabels,
+  skillLevelLabelsEn,
+} from '../../types/enums';
+import type { LangCode } from '../../types/i18n';
 import { Resume } from '../../types/resume';
 import { formatDateRange } from '../../utils/format';
+import { getLocal, getLocalList } from '../../utils/i18n';
 
 interface ResumePreviewProps {
   resume: Resume;
   template?: ResumeTemplate;
   fontSize?: number;
+  lang?: LangCode;
+}
+
+function isChinese(lang: LangCode): boolean {
+  return lang.startsWith('zh');
 }
 
 function SectionTitle({ children, accent }: { children: string; accent: string }) {
@@ -19,17 +33,25 @@ function SectionTitle({ children, accent }: { children: string; accent: string }
   );
 }
 
-export function ResumePreview({ resume, template = getTemplateById(resume.templateId), fontSize = 14 }: ResumePreviewProps) {
+export function ResumePreview({ resume, template = getTemplateById(resume.templateId), fontSize = 14, lang }: ResumePreviewProps) {
   const profile = useProfileStore((state) => state.profile);
+  const source = resume.i18n.sourceLanguage;
+  const currentLang = lang ?? source;
+  const chinese = isChinese(currentLang);
+
+  const t = (field: Parameters<typeof getLocal>[0]) => getLocal(field, currentLang, source).value;
+  const tl = (field: Parameters<typeof getLocalList>[0]) => getLocalList(field, currentLang, source).value;
+
   const info = {
     fullName: resume.basicInfo.fullName || profile.fullName,
-    headline: resume.basicInfo.headline || profile.headline,
+    headline: t(resume.basicInfo.headline) || t(profile.headline),
     phone: resume.basicInfo.phone || profile.phone,
     email: resume.basicInfo.email || profile.email,
-    location: resume.basicInfo.location || profile.location,
+    location: t(resume.basicInfo.location) || t(profile.location),
     website: resume.basicInfo.website || profile.website,
     avatarUrl: resume.basicInfo.avatarUrl || profile.avatarUrl,
   };
+  const summary = t(resume.summary) || t(profile.summary);
   const enabledSections = resume.sections.filter((section) => section.enabled);
   const style = {
     '--template-accent': template.accent,
@@ -40,14 +62,18 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
     fontSize,
   } as CSSProperties;
 
+  const levelLabel = (level: keyof typeof skillLevelLabels) => (chinese ? skillLevelLabels[level] : skillLevelLabelsEn[level]);
+  const educationLabel = (level: keyof typeof educationLevelLabels) => (chinese ? educationLevelLabels[level] : educationLevelLabelsEn[level]);
+  const categoryLabel = (category: keyof typeof skillCategoryLabels) => (chinese ? skillCategoryLabels[category] : skillCategoryLabelsEn[category]);
+
   const content = (
     <div className="space-y-5">
       {enabledSections.map((section) => {
         if (section.id === 'summary') {
           return (
             <section key={section.id}>
-              <SectionTitle accent={template.accent}>{section.title}</SectionTitle>
-              <p className="leading-7">{resume.summary || profile.summary}</p>
+              <SectionTitle accent={template.accent}>{t(section.title)}</SectionTitle>
+              <p className="leading-7">{summary}</p>
             </section>
           );
         }
@@ -55,20 +81,20 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
         if (section.id === 'work') {
           return (
             <section key={section.id}>
-              <SectionTitle accent={template.accent}>{section.title}</SectionTitle>
+              <SectionTitle accent={template.accent}>{t(section.title)}</SectionTitle>
               <div className="space-y-4">
                 {resume.workExperiences.map((item) => (
                   <article key={item.id}>
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <h3 className="font-semibold">{item.position}</h3>
-                        <p style={{ color: template.accent }}>{item.companyName}</p>
+                        <h3 className="font-semibold">{t(item.position)}</h3>
+                        <p style={{ color: template.accent }}>{t(item.companyName)}</p>
                       </div>
-                      <p className="shrink-0 text-[0.85em] opacity-75">{formatDateRange(item.startDate, item.endDate)}</p>
+                      <p className="shrink-0 text-[0.85em] opacity-75">{formatDateRange(item.startDate, item.endDate, currentLang)}</p>
                     </div>
                     <ul className="mt-2 list-disc space-y-1 pl-5 leading-6">
-                      {[...item.responsibilities, ...item.achievements].map((line) => (
-                        <li key={line}>{line}</li>
+                      {[...tl(item.responsibilities), ...tl(item.achievements)].map((line, index) => (
+                        <li key={`${item.id}-${index}`}>{line}</li>
                       ))}
                     </ul>
                   </article>
@@ -81,23 +107,23 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
         if (section.id === 'projects') {
           return (
             <section key={section.id}>
-              <SectionTitle accent={template.accent}>{section.title}</SectionTitle>
+              <SectionTitle accent={template.accent}>{t(section.title)}</SectionTitle>
               <div className="space-y-4">
                 {resume.projects.map((project) => (
                   <article key={project.id}>
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <h3 className="font-semibold">{project.name}</h3>
+                        <h3 className="font-semibold">{t(project.name)}</h3>
                         <p className="text-[0.9em] opacity-75">
-                          {project.role} · {project.techStack.join(' / ')}
+                          {t(project.role)} · {tl(project.techStack).join(' / ')}
                         </p>
                       </div>
-                      <p className="shrink-0 text-[0.85em] opacity-75">{formatDateRange(project.startDate, project.endDate)}</p>
+                      <p className="shrink-0 text-[0.85em] opacity-75">{formatDateRange(project.startDate, project.endDate, currentLang)}</p>
                     </div>
-                    <p className="mt-2 leading-6">{project.description}</p>
+                    <p className="mt-2 leading-6">{t(project.description)}</p>
                     <ul className="mt-2 list-disc space-y-1 pl-5 leading-6">
-                      {project.outcomes.map((outcome) => (
-                        <li key={outcome}>{outcome}</li>
+                      {tl(project.outcomes).map((outcome, index) => (
+                        <li key={`${project.id}-${index}`}>{outcome}</li>
                       ))}
                     </ul>
                   </article>
@@ -110,14 +136,14 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
         if (section.id === 'skills') {
           return (
             <section key={section.id}>
-              <SectionTitle accent={template.accent}>{section.title}</SectionTitle>
+              <SectionTitle accent={template.accent}>{t(section.title)}</SectionTitle>
               <div className="grid gap-2">
                 {resume.skills.map((skill) => (
                   <div className="grid grid-cols-[1fr_auto] items-center gap-3" key={skill.id}>
                     <div>
-                      <p className="font-semibold">{skill.name}</p>
+                      <p className="font-semibold">{t(skill.name)}</p>
                       <p className="text-[0.82em] opacity-70">
-                        {skillCategoryLabels[skill.category]} · {skillLevelLabels[skill.level]}
+                        {categoryLabel(skill.category)} · {levelLabel(skill.level)}
                       </p>
                     </div>
                     <div className="h-2 w-24 bg-black/10">
@@ -132,18 +158,19 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
 
         return (
           <section key={section.id}>
-            <SectionTitle accent={template.accent}>{section.title}</SectionTitle>
+            <SectionTitle accent={template.accent}>{t(section.title)}</SectionTitle>
             <div className="space-y-3">
               {resume.educations.map((education) => (
                 <article className="flex items-start justify-between gap-4" key={education.id}>
                   <div>
-                    <h3 className="font-semibold">{education.school}</h3>
+                    <h3 className="font-semibold">{t(education.school)}</h3>
                     <p className="opacity-80">
-                      {education.major} · {educationLevelLabels[education.level]} · GPA {education.gpa}
+                      {t(education.major)} · {educationLabel(education.level)}
+                      {education.gpa ? ` · GPA ${education.gpa}` : ''}
                     </p>
-                    {education.honors.length > 0 ? <p className="mt-1 text-[0.9em] opacity-75">{education.honors.join(' / ')}</p> : null}
+                    {tl(education.honors).length > 0 ? <p className="mt-1 text-[0.9em] opacity-70">{tl(education.honors).join(' / ')}</p> : null}
                   </div>
-                  <p className="shrink-0 text-[0.85em] opacity-75">{formatDateRange(education.startDate, education.endDate)}</p>
+                  <p className="shrink-0 text-[0.85em] opacity-75">{formatDateRange(education.startDate, education.endDate, currentLang)}</p>
                 </article>
               ))}
             </div>
@@ -188,7 +215,7 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
           </div>
           {info.avatarUrl ? <img className="h-20 w-20 object-cover" src={info.avatarUrl} alt={info.fullName} /> : null}
         </div>
-        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-[0.9em] opacity-75">
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-[0.9em] opacity-70">
           <span>{info.phone}</span>
           <span>{info.email}</span>
           <span>{info.location}</span>

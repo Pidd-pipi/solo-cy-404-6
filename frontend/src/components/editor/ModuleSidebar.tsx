@@ -1,7 +1,9 @@
 import { Switch } from '@headlessui/react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useDragSort } from '../../hooks/useDragSort';
+import type { LangCode } from '../../types/i18n';
 import { ResumeSection, ResumeSectionType } from '../../types/resume';
+import { getLocal } from '../../utils/i18n';
 import { DragHandle } from '../common/DragHandle';
 
 interface ModuleSidebarProps {
@@ -10,9 +12,11 @@ interface ModuleSidebarProps {
   onSelect: (sectionId: ResumeSectionType) => void;
   onSorted: (sections: ResumeSection[]) => void;
   onToggle: (sectionId: ResumeSectionType) => void;
+  lang: LangCode;
+  source: LangCode;
 }
 
-export function ModuleSidebar({ sections, activeSectionId, onSelect, onSorted, onToggle }: ModuleSidebarProps) {
+export function ModuleSidebar({ sections, activeSectionId, onSelect, onSorted, onToggle, lang, source }: ModuleSidebarProps) {
   const { items, onDragEnd } = useDragSort(sections, onSorted);
 
   return (
@@ -43,7 +47,7 @@ export function ModuleSidebar({ sections, activeSectionId, onSelect, onSorted, o
                         type="button"
                         onClick={() => onSelect(section.id)}
                       >
-                        {section.title}
+                        {getLocal(section.title, lang, source).value}
                       </button>
                       <Switch
                         checked={section.enabled}
@@ -51,7 +55,7 @@ export function ModuleSidebar({ sections, activeSectionId, onSelect, onSorted, o
                         className={`relative inline-flex h-6 w-10 shrink-0 rounded-full border border-[var(--border)] transition ${
                           section.enabled ? 'bg-[var(--accent)]' : 'bg-[var(--surface-alt)]'
                         }`}
-                        aria-label={`${section.title} 启用状态`}
+                        aria-label={`${getLocal(section.title, lang, source).value} 启用状态`}
                       >
                         <span
                           className={`mt-0.5 h-5 w-5 rounded-full bg-[var(--surface)] transition ${

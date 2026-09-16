@@ -1,10 +1,14 @@
 import { Download } from 'lucide-react';
+import type { LangVariant } from '../../types/i18n';
 import { Button } from '../common/Button';
 
 interface ExportSettingsProps {
   margin: number;
   fontSize: number;
   isExporting: boolean;
+  languages: LangVariant[];
+  lang: string;
+  onLangChange: (lang: string) => void;
   onMarginChange: (value: number) => void;
   onFontSizeChange: (value: number) => void;
   onExport: () => void;
@@ -14,6 +18,9 @@ export function ExportSettings({
   margin,
   fontSize,
   isExporting,
+  languages,
+  lang,
+  onLangChange,
   onMarginChange,
   onFontSizeChange,
   onExport,
@@ -22,6 +29,22 @@ export function ExportSettings({
     <aside className="border border-[var(--border)] bg-[var(--surface)] p-4">
       <h2 className="font-display text-xl font-semibold">导出设置</h2>
       <div className="mt-5 space-y-5">
+        <label className="block space-y-2 text-sm font-medium">
+          <span>导出版本语言</span>
+          <select
+            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm"
+            value={lang}
+            onChange={(event) => onLangChange(event.target.value)}
+            aria-label="导出版本语言"
+          >
+            {languages.map((variant) => (
+              <option key={variant.code} value={variant.code}>
+                {variant.label}
+                {variant.code === languages[0]?.code ? '（原文）' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="block space-y-2 text-sm font-medium">
           <span>页边距 {margin}mm</span>
           <input
@@ -57,4 +80,3 @@ export function ExportSettings({
     </aside>
   );
 }
-
