@@ -11,7 +11,7 @@ import { ResumePreview } from '../components/preview/ResumePreview';
 import { useProfileStore } from '../stores/profile';
 import { useResumeStore } from '../stores/resume';
 import { templates } from '../stores/template';
-import { getLocal, setLocal, setSource } from '../utils/i18n';
+import { getLocal, resolveLangCode, setLocal, setSource } from '../utils/i18n';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { LangCode, LocalField } from '../types/i18n';
 import { ResumeSection, ResumeSectionType } from '../types/resume';
@@ -32,10 +32,11 @@ export function ResumeEditor() {
   const resume = useMemo(() => resumes.find((item) => item.id === id), [id, resumes]);
 
   const source = resume?.i18n.sourceLanguage ?? 'zh-CN';
-  const languageCodes = resume?.i18n.languages.map((item) => item.code) ?? [source];
+  const languages = resume?.i18n.languages ?? [];
+  const languageCodes = languages.map((item) => item.code);
   const [storedLang, setStoredLang] = useLocalStorage<string>(`smart-resume:working-lang:${id}`, source);
-  // 当前语言若已被移出则回落到源语言
-  const lang = languageCodes.includes(storedLang) ? storedLang : source;
+  // 当前语言大小写不敏感解析；若已被移出则回落到源语言。
+  const lang = (resume ? resolveLangCode(languages, storedLang) : null) ?? source;
 
   useEffect(() => {
     if (resume) {

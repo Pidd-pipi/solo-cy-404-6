@@ -4,10 +4,16 @@ import assert from 'node:assert';
 import {
   approveResumeLanguage,
   countResumeStale,
+  dedupeResumeLanguages,
   getLocal,
   getLocalList,
+  langKey,
+  makeField,
+  makeListField,
   mapResumeFields,
+  normalizeLangCode,
   removeResumeLanguage,
+  resolveLangCode,
   seedResumeLanguage,
   setLocal,
   setLocalList,
@@ -170,6 +176,77 @@ function resolveExistingLang(selected: string, codes: string[], sourceLang: stri
 assert.strictEqual(resolveExistingLang(EN, [ZH], ZH), ZH, '英文被移出 -> 回退源语言');
 assert.strictEqual(resolveExistingLang(EN, [ZH, EN], ZH), EN, '语言仍存在 -> 保持选择');
 ok('移出当前导出语言时回退到现存语言');
+
+// 14. 语言代码规范化与大小写不敏感解析
+assert.strictEqual(normalizeLangCode('  en '), 'en');
+assert.strictEqual(langKey(' EN '), 'en');
+assert.strictEqual(resolveLangCode([{ code: 'en', label: 'English' }], 'EN'), 'en');
+assert.strictEqual(resolveLangCode([{ code: 'en', label: 'English' }], 'ja'), null);
+ok('语言代码：trim + 大小写不敏感解析');
+
+// 15. 备份含重复代码（en / EN）时合并为唯一版本
+const dupRaw = {
+  id: 'dup-1',
+  title: '重复语言简历',
+  templateId: 'atelier',
+  createdAt: '2024-01-01T00:00:00.000Z',
+  updatedAt: '2024-01-02T00:00:00.000Z',
+  i18n: {
+    languages: [
+      { code: 'zh-CN', label: '中文' },
+      { code: 'en', label: 'English' },
+      { code: 'EN', label: 'English Upper' },
+    ],
+    sourceLanguage: 'zh-CN',
+  },
+  basicInfo: { fullName: '张三', headline: '', phone: '', email: '', location: '', website: '' },
+  summary: { values: { 'zh-CN': '摘要', en: '', EN: 'English Summary' }, stale: { EN: true } },
+  sections: [],
+  workExperiences: [
+    {
+      id: 'w1',
+      companyName: { values: { 'zh-CN': '公司', en: 'Company', EN: 'Company Upper' }, stale: { EN: true } },
+      position: '',
+      startDate: '2020.01',
+      endDate: '',
+      responsibilities: { values: { en: ['Duty A'], EN: ['Duty B'] } },
+      achievements: [],
+    },
+  ],
+  educations: [],
+  skills: [],
+  projects: [],
+};
+const merged = migrateResume(dupRaw);
+assert.deepStrictEqual(merged.i18n.languages.map((l) => l.code), [ZH, EN], '重复语言合并为唯一，保留首次写法');
+assert.strictEqual(merged.i18n.sourceLanguage, ZH, '源语言身份稳定');
+const companyValues = (merged.workExperiences[0].companyName as { values: Record<string, string> }).values;
+assert.deepStrictEqual(Object.keys(companyValues).sort(), ['en', 'zh-CN'], '旧大写键已并入规范 en');
+const mergedTitle = getLocal(merged.workExperiences[0].companyName, EN, ZH);
+assert.strictEqual(mergedTitle.value, 'Company');
+assert.strictEqual(mergedTitle.isStale, true, '原本就待复核的状态保留');
+const mergedSummary = getLocal(merged.summary, EN, ZH);
+assert.strictEqual(mergedSummary.value, 'English Summary', '非空译文优先，不被空写法覆盖');
+assert.strictEqual(mergedSummary.isStale, true, '写法间冲突 -> 标记待复核，不静默丢失');
+const mergedResp = getLocalList(merged.workExperiences[0].responsibilities, EN, ZH);
+assert.deepStrictEqual(mergedResp.value, ['Duty A']);
+assert.strictEqual(mergedResp.isStale, true, '列表冲突也标记待复核');
+ok('备份恢复：重复代码合并，保留非空译文与待复核，冲突不丢内容');
+
+// 16. 合并幂等：再次去重 / 再迁移不再产生重复或额外待复核
+const mergedAgain = dedupeResumeLanguages(merged);
+assert.deepStrictEqual(mergedAgain.i18n.languages.map((l) => l.code), [ZH, EN]);
+assert.deepStrictEqual(getLocal(mergedAgain.workExperiences[0].companyName, EN, ZH).value, 'Company');
+ok('合并幂等：刷新与再次备份后不再出现重复项');
+
+// 17. 移出合并后的语言不影响其它语言与源语言身份（store 先用 resolveLangCode 把 EN 解析为规范 en）
+assert.strictEqual(resolveLangCode(mergedAgain.i18n.languages, 'EN'), EN, '大写写法解析到规范代码');
+const removed = removeResumeLanguage(mergedAgain, EN);
+const removedCompany = (removed.workExperiences[0].companyName as { values: Record<string, string> }).values;
+assert.deepStrictEqual(Object.keys(removedCompany), [ZH], '英文译文键已删除，中文保留');
+assert.strictEqual(getLocal(removed.title, ZH, ZH).value, '重复语言简历', '源语言内容稳定');
+assert.strictEqual(getLocal(removed.workExperiences[0].companyName, EN, ZH).isFallback, true, '英文已删 -> 回退源语言');
+ok('移除某一表示：其它语言与源语言身份保持稳定');
 
 function v2Shape(resume: Resume) {
   return JSON.parse(JSON.stringify(resume));

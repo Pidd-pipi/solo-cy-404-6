@@ -320,4 +320,128 @@ test.describe('多语言简历对照台', () => {
     expect(migrated[0].sections).toHaveLength(5); // 缺失模块自动补齐
     fs.rmSync(legacyPath, { force: true });
   });
+
+  test('同一语言不能以不同大小写/空白重复添加', async ({ page }) => {
+    const id = await firstResumeId(page);
+    await openEditor(page, id);
+    await addLanguage(page, 'en');
+
+    // 再次添加，自定义代码使用 " EN "（空白 + 大写）
+    await page.getByTestId('add-lang-toggle').click();
+    await page.getByTestId('add-lang-preset').selectOption('__custom__');
+    // 表单展开自定义输入：按 aria-label/占位定位
+    await page.locator('input[placeholder="en"]').fill('  EN  ');
+    await page.locator('input[placeholder="English"]').fill('English Duplicate');
+    await page.getByTestId('add-lang-submit').click();
+
+    await expect(page.getByText('该语言已存在（语言代码不区分大小写）')).toBeVisible();
+    // 只有一个英语胶囊，且语言列表中只有一个 en
+    await expect(page.getByTestId('lang-en')).toHaveCount(1);
+    await expect(page.getByTestId('lang-EN')).toHaveCount(0);
+    const resumes = await readResumes(page);
+    expect(resumes[0].i18n.languages.map((l: any) => l.code)).toEqual(['zh-CN', 'en']);
+  });
+
+  test('含重复大小写代码的备份恢复后合并为唯一版本，导出选择稳定', async ({ page }) => {
+    const duplicateBackup = {
+      version: 2,
+      exportedAt: '2026-01-01T00:00:00.000Z',
+      activeResumeId: 'dup-1',
+      selectedTemplateId: 'atelier',
+      theme: 'light',
+      profile: {
+        fullName: '张三',
+        headline: { values: { 'zh-CN': '工程师', en: 'Engineer', EN: 'Engineer X' } },
+        phone: '',
+        email: '',
+        location: '',
+        website: '',
+        avatarUrl: '',
+        targetRole: '',
+        summary: '',
+      },
+      resumes: [
+        {
+          id: 'dup-1',
+          title: '重复语言简历',
+          templateId: 'atelier',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-02T00:00:00.000Z',
+          i18n: {
+            languages: [
+              { code: 'zh-CN', label: '中文' },
+              { code: 'en', label: 'English' },
+              { code: 'EN', label: 'English Upper' },
+            ],
+            sourceLanguage: 'zh-CN',
+          },
+          basicInfo: {
+            fullName: '张三',
+            headline: { values: { 'zh-CN': '工程师', en: 'Engineer', EN: 'Engineer X' }, stale: { EN: true } },
+            phone: '',
+            email: '',
+            location: '',
+            website: '',
+          },
+          summary: '',
+          sections: [{ id: 'summary', title: 'Summary', enabled: true }],
+          workExperiences: [
+            {
+              id: 'w1',
+              companyName: { values: { 'zh-CN': '公司', en: '', EN: 'Company Upper' }, stale: { EN: true } },
+              position: '',
+              startDate: '2020.01',
+              endDate: '',
+              responsibilities: { values: { en: ['Duty A'], EN: ['Duty B'] } },
+              achievements: [],
+            },
+          ],
+          educations: [],
+          skills: [],
+          projects: [],
+        },
+      ],
+    };
+    const dupPath = path.join(os.tmpdir(), 'duplicate-lang-backup.json');
+    fs.writeFileSync(dupPath, JSON.stringify(duplicateBackup), 'utf8');
+
+    await resetStorage(page);
+    await page.getByTestId('import-file').setInputFiles(dupPath);
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('heading', { name: '简历列表' }).waitFor();
+
+    const restored = await readResumes(page);
+    expect(restored[0].i18n.languages.map((l: any) => l.code)).toEqual(['zh-CN', 'en']);
+    expect(restored[0].i18n.sourceLanguage).toBe('zh-CN');
+    const company = restored[0].workExperiences[0].companyName;
+    expect(Object.keys(company.values).sort()).toEqual(['en', 'zh-CN']);
+    expect(company.values.en).toBe('Company Upper'); // 非空译文优先（en 为空、EN 有值）
+    expect(company.stale.en).toBe(true); // 冲突/原 stale 保留为待复核，内容未静默丢失
+
+    // 编辑器只有一个英语胶囊，切过去可看到合并后的内容与待复核标记
+    await page.goto('/resumes/dup-1/edit');
+    await page.getByTestId('resume-preview').waitFor();
+    await expect(page.getByTestId('lang-en')).toHaveCount(1);
+    await expect(page.getByTestId('lang-EN')).toHaveCount(0);
+    await page.getByTestId('lang-en').click();
+    await page.getByTestId('section-work').click();
+    const companyField = page.getByTestId('field-公司名称').first();
+    await expect(companyField.locator('input')).toHaveValue('Company Upper');
+    await expect(companyField.getByTestId('stale-badge')).toBeVisible();
+
+    // 导出页语言下拉只有一个英语选项，且大写旧选择 EN 也能解析到 en
+    await page.evaluate((key) => window.localStorage.setItem(key, JSON.stringify('EN')), 'smart-resume:export-lang:dup-1');
+    await page.goto('/resumes/dup-1/export');
+    await expect(page.getByTestId('export-lang')).toHaveValue('en');
+    await expect(page.getByTestId('resume-preview')).toContainText('Company Upper');
+
+    // 再次导出备份后不再含重复项
+    const downloadPromise2 = page.waitForEvent('download');
+    await page.goto('/resumes');
+    await page.getByTestId('export-json').click();
+    const download2 = await downloadPromise2;
+    const reexported = JSON.parse(fs.readFileSync((await download2.path())!, 'utf8'));
+    expect(reexported.resumes[0].i18n.languages.map((l: any) => l.code)).toEqual(['zh-CN', 'en']);
+    fs.rmSync(dupPath, { force: true });
+  });
 });

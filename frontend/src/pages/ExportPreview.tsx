@@ -7,7 +7,7 @@ import { ExportSettings } from '../components/preview/ExportSettings';
 import { useExportPdf } from '../hooks/useExportPdf';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useResumeStore } from '../stores/resume';
-import { getLocal } from '../utils/i18n';
+import { getLocal, resolveLangCode } from '../utils/i18n';
 import { readStorage } from '../utils/storage';
 
 export function ExportPreview() {
@@ -30,8 +30,8 @@ export function ExportPreview() {
     if (!resume) {
       return storedLang;
     }
-    // 正在导出的语言被移出时，回退到仍然存在的语言（源语言始终存在）。
-    return resume.i18n.languages.some((item) => item.code === storedLang) ? storedLang : source;
+    // 大小写不敏感解析；所选语言被移出后回退到源语言。
+    return resolveLangCode(resume.i18n.languages, storedLang) ?? source;
   }, [resume, storedLang, source]);
 
   // 回退后把导出选择同步为现存语言，避免残留已删除的语言码。

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Check, Globe, Plus, X } from 'lucide-react';
 import type { LangVariant } from '../../types/i18n';
 import { Resume } from '../../types/resume';
-import { countResumeStale, LANG_PRESETS } from '../../utils/i18n';
+import { countResumeStale, LANG_PRESETS, langKey } from '../../utils/i18n';
 import { Button } from '../common/Button';
 
 interface LanguageSwitcherProps {
@@ -121,8 +121,9 @@ function AddLanguageForm({
   onSubmit: (variant: LangVariant, copyFrom: string) => void;
   onCancel: () => void;
 }) {
-  const existing = new Set(resume.i18n.languages.map((item) => item.code));
-  const availablePresets = LANG_PRESETS.filter((preset) => !existing.has(preset.code));
+  // 判重忽略首尾空白与大小写（en / EN / en 视为同一语言）。
+  const existingKeys = new Set(resume.i18n.languages.map((item) => langKey(item.code)));
+  const availablePresets = LANG_PRESETS.filter((preset) => !existingKeys.has(langKey(preset.code)));
   const [presetCode, setPresetCode] = useState(availablePresets[0]?.code ?? '__custom__');
   const [customCode, setCustomCode] = useState('');
   const [customLabel, setCustomLabel] = useState('');
@@ -135,14 +136,14 @@ function AddLanguageForm({
   const handleSubmit = () => {
     const isCustom = presetCode === '__custom__' || availablePresets.length === 0;
     const code = (isCustom ? customCode : presetCode).trim();
-    const preset = LANG_PRESETS.find((item) => item.code === code);
+    const preset = LANG_PRESETS.find((item) => langKey(item.code) === langKey(code));
     const label = (isCustom ? customLabel.trim() : '') || preset?.label || code;
     if (!code) {
       setError('请填写语言代码，例如 en、fr、de。');
       return;
     }
-    if (existing.has(code)) {
-      setError('该语言已存在。');
+    if (existingKeys.has(langKey(code))) {
+      setError('该语言已存在（语言代码不区分大小写）。');
       return;
     }
     onSubmit({ code, label }, copyFrom);

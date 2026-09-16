@@ -319,9 +319,232 @@ function fieldIsStale(field: LocalField | LocalListField, lang: LangCode): boole
   return Boolean(field && typeof field === 'object' && !Array.isArray(field) && field.stale?.[lang]);
 }
 
+// ---------------------------------------------------------------------------
+// 语言代码规范化与重复版本合并
+// ---------------------------------------------------------------------------
+
+/** 规范化语言代码：忽略首尾空白；重复判断时大小写不敏感。 */
+export function normalizeLangCode(code: LangCode): LangCode {
+  return code.trim();
+}
+
+/** 比较用键：去空白并转小写（zh-CN / zh-cn / EN / en 视为同一语言）。 */
+export function langKey(code: LangCode): string {
+  return normalizeLangCode(code).toLowerCase();
+}
+
+interface LangGroup {
+  key: string;
+  /** 合并后保留的规范代码：沿用语言列表中首次出现的写法。 */
+  canonical: LangCode;
+  /** 同一语言的所有代码写法（含大小写/空白差异），按出现顺序。 */
+  members: LangCode[];
+}
+
+function groupCodes(codes: LangCode[]): LangGroup[] {
+  const groups: LangGroup[] = [];
+  for (const raw of codes) {
+    const code = normalizeLangCode(raw);
+    if (!code) {
+      continue;
+    }
+    const key = langKey(code);
+    const group = groups.find((item) => item.key === key);
+    if (group) {
+      if (!group.members.includes(code)) {
+        group.members.push(code);
+      }
+    } else {
+      groups.push({ key, canonical: code, members: [code] });
+    }
+  }
+  return groups;
+}
+
+/** 在语言列表中大小写不敏感地解析出实际代码；不存在时返回 null。 */
+export function resolveLangCode(languages: LangVariant[], selected: LangCode): LangCode | null {
+  const key = langKey(selected);
+  return languages.find((item) => langKey(item.code) === key)?.code ?? null;
+}
+
+function dedupeLanguageVariants(languages: LangVariant[], groups: LangGroup[]): LangVariant[] {
+  return groups.map((group) => {
+    // 规范代码优先沿用语言列表中已登记的名称；未登记（只存在于字段里的孤儿译文）也补登，避免内容不可见。
+    const variant = languages.find((item) => langKey(item.code) === group.key);
+    const preset = LANG_PRESETS.find((item) => langKey(item.code) === group.key);
+    return { code: group.canonical, label: variant?.label || preset?.label || group.canonical };
+  });
+}
+
+function mergeTextField(field: LocalField | null | undefined, groups: LangGroup[], source: LangCode): LocalText {
+  const text = asText(field, source);
+  const values: LocalText['values'] = {};
+  const stale: Record<LangCode, true> = {};
+  for (const group of groups) {
+    const candidates = group.members
+      .map((member) => text.values[member])
+      .filter((value): value is string => typeof value === 'string');
+    if (candidates.length === 0) {
+      continue;
+    }
+    const nonEmpty = candidates.find((value) => value.trim() !== '');
+    // 非空译文优先，避免被另一种写法里的空值覆盖；全部为空时取首个写法。
+    values[group.canonical] = nonEmpty ?? candidates[0];
+    if (group.canonical === source) {
+      continue; // 源语言不参与待复核
+    }
+    const hadStale = group.members.some((member) => text.stale?.[member] === true);
+    const distinct = new Set(candidates.map((value) => value.trim()));
+    // 写法间内容不一致即为冲突：保留一种（非空优先），但标记待复核，不静默丢弃。
+    if (hadStale || distinct.size > 1) {
+      stale[group.canonical] = true;
+    }
+  }
+  return { values, stale: tidyStale(stale) };
+}
+
+function mergeListField(field: LocalListField | null | undefined, groups: LangGroup[], source: LangCode): LocalTextList {
+  const list = asList(field, source);
+  const values: LocalTextList['values'] = {};
+  const stale: Record<LangCode, true> = {};
+  for (const group of groups) {
+    const candidates = group.members
+      .map((member) => list.values[member])
+      .filter((value): value is string[] => Array.isArray(value));
+    if (candidates.length === 0) {
+      continue;
+    }
+    const nonEmpty = candidates.find((value) => value.some((line) => line.trim() !== ''));
+    // 非空列表优先；都为空则保留显式清空的空数组（取首个写法）。
+    values[group.canonical] = nonEmpty ? [...nonEmpty] : [...candidates[0]];
+    if (group.canonical === source) {
+      continue;
+    }
+    const hadStale = group.members.some((member) => list.stale?.[member] === true);
+    const signatures = new Set(candidates.map((value) => JSON.stringify(value)));
+    if (hadStale || signatures.size > 1) {
+      stale[group.canonical] = true;
+    }
+  }
+  return { values, stale: tidyStale(stale) };
+}
+
+/** 收集简历所有可翻译字段里实际出现过的语言代码（含未登记在 i18n.languages 中的）。 */
+function collectResumeFieldCodes(resume: Resume): LangCode[] {
+  const codes: LangCode[] = [];
+  const seen = new Set<string>();
+  const remember = (field: LocalField | LocalListField) => {
+    if (field && typeof field === 'object' && !Array.isArray(field)) {
+      for (const code of Object.keys(field.values ?? {})) {
+        const key = langKey(code);
+        if (!seen.has(key)) {
+          seen.add(key);
+          codes.push(code);
+        }
+      }
+    }
+  };
+  mapResumeFields(
+    resume,
+    (field) => {
+      remember(field);
+      return field;
+    },
+    (field) => {
+      remember(field);
+      return field;
+    },
+  );
+  return codes;
+}
+
+/**
+ * 合并简历里大小写不同的重复语言：
+ * - 语言列表按大小写不敏感去重，保留首次出现的写法与名称；
+ * - 各字段同语言的多种写法合并为唯一键：非空译文优先、保留待复核状态，
+ *   写法间内容冲突时标记待复核（由人复核），绝不静默丢失内容；
+ * - 源语言身份映射到合并后的规范代码。
+ */
+export function dedupeResumeLanguages(resume: Resume): Resume {
+  const groupsMap = new Map<string, LangGroup>();
+  const groups: LangGroup[] = [];
+  // 先以语言列表建立分组，规范代码以列表中首次出现的写法为准。
+  for (const variant of resume.i18n.languages) {
+    const code = normalizeLangCode(variant.code);
+    if (!code) {
+      continue;
+    }
+    const key = langKey(code);
+    const existing = groupsMap.get(key);
+    if (!existing) {
+      const group: LangGroup = { key, canonical: code, members: [code] };
+      groupsMap.set(key, group);
+      groups.push(group);
+    } else if (!existing.members.includes(code)) {
+      existing.members.push(code);
+    }
+  }
+  // 再把仅出现在字段里的代码（未登记语言、大小写不同等）并入对应分组。
+  for (const rawCode of collectResumeFieldCodes(resume)) {
+    const code = normalizeLangCode(rawCode);
+    const key = langKey(code);
+    const existing = groupsMap.get(key);
+    if (existing) {
+      if (!existing.members.includes(code)) {
+        existing.members.push(code);
+      }
+    } else {
+      const group: LangGroup = { key, canonical: code, members: [code] };
+      groupsMap.set(key, group);
+      groups.push(group);
+    }
+  }
+  if (groups.length === 0) {
+    return resume;
+  }
+
+  const originalSource = normalizeLangCode(resume.i18n.sourceLanguage);
+  const sourceGroup = groups.find((group) => group.key === langKey(originalSource)) ?? groups[0];
+  const merged = mapResumeFields(
+    resume,
+    (field) => mergeTextField(field, groups, sourceGroup.canonical),
+    (field) => mergeListField(field, groups, sourceGroup.canonical),
+  );
+  return {
+    ...merged,
+    i18n: {
+      languages: dedupeLanguageVariants(resume.i18n.languages, groups),
+      sourceLanguage: sourceGroup.canonical,
+    },
+  };
+}
+
+/** Profile 没有语言列表，按字段里出现的代码合并；规范代码优先取常用预设写法。 */
+export function dedupeProfileLanguages<T>(profile: T, fieldKeys: (keyof T)[]): T {
+  const codes: LangCode[] = [];
+  for (const key of fieldKeys) {
+    const field = profile[key] as LocalField | undefined;
+    if (field && typeof field === 'object' && !Array.isArray(field)) {
+      codes.push(...Object.keys(field.values ?? {}));
+    }
+  }
+  const groups = groupCodes(codes).map((group) => {
+    const preset = LANG_PRESETS.find((item) => langKey(item.code) === group.key);
+    return preset ? { ...group, canonical: preset.code } : group;
+  });
+  if (groups.length === 0) {
+    return profile;
+  }
+  const next: Record<string, unknown> = { ...(profile as object) };
+  for (const key of fieldKeys) {
+    next[key as string] = mergeTextField(profile[key] as LocalField, groups, SOURCE_LANGUAGE);
+  }
+  return next as T;
+}
+
 /** 统计某语言待复核字段数量。 */
 export function countResumeStale(resume: Resume, lang: LangCode): number {
-  if (lang === resume.i18n.sourceLanguage) {
+  if (langKey(lang) === langKey(resume.i18n.sourceLanguage)) {
     return 0;
   }
   let count = 0;

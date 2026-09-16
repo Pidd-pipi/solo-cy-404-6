@@ -8,6 +8,7 @@ import {
   makeField,
   makeListField,
   removeResumeLanguage,
+  resolveLangCode,
   seedResumeLanguage,
   SOURCE_LANGUAGE,
   SOURCE_LANGUAGE_LABEL,
@@ -265,14 +266,17 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
         if (resume.id !== resumeId) {
           return resume;
         }
-        if (resume.i18n.languages.some((lang) => lang.code === variant.code)) {
+        // 忽略首尾空白，按大小写不敏感判重（en / EN / en 视为同一语言）。
+        const code = variant.code.trim();
+        if (!code || resume.i18n.languages.some((item) => item.code.trim().toLowerCase() === code.toLowerCase())) {
           return resume;
         }
-        const from = copyFrom ?? resume.i18n.sourceLanguage;
-        const seeded = seedResumeLanguage(resume, from, variant.code);
+        const normalizedVariant = { code, label: variant.label.trim() || code };
+        const from = resolveLangCode(resume.i18n.languages, copyFrom ?? resume.i18n.sourceLanguage) ?? resume.i18n.sourceLanguage;
+        const seeded = seedResumeLanguage(resume, from, normalizedVariant.code);
         return {
           ...seeded,
-          i18n: { ...seeded.i18n, languages: [...seeded.i18n.languages, variant] },
+          i18n: { ...seeded.i18n, languages: [...seeded.i18n.languages, normalizedVariant] },
           updatedAt: new Date().toISOString(),
         };
       }),
@@ -282,13 +286,18 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   removeLanguage: (resumeId, lang) => {
     set((state) => ({
       resumes: state.resumes.map((resume) => {
-        if (resume.id !== resumeId || lang === resume.i18n.sourceLanguage) {
+        if (resume.id !== resumeId) {
           return resume;
         }
-        const stripped = removeResumeLanguage(resume, lang);
+        // 大小写不敏感地解析到实际代码；源语言恒不可移除。
+        const actual = resolveLangCode(resume.i18n.languages, lang);
+        if (!actual || actual === resume.i18n.sourceLanguage) {
+          return resume;
+        }
+        const stripped = removeResumeLanguage(resume, actual);
         return {
           ...stripped,
-          i18n: { ...stripped.i18n, languages: stripped.i18n.languages.filter((item) => item.code !== lang) },
+          i18n: { ...stripped.i18n, languages: stripped.i18n.languages.filter((item) => item.code !== actual) },
           updatedAt: new Date().toISOString(),
         };
       }),
@@ -297,9 +306,16 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
   },
   approveLanguage: (resumeId, lang) => {
     set((state) => ({
-      resumes: state.resumes.map((resume) =>
-        resume.id === resumeId ? { ...approveResumeLanguage(resume, lang), updatedAt: new Date().toISOString() } : resume,
-      ),
+      resumes: state.resumes.map((resume) => {
+        if (resume.id !== resumeId) {
+          return resume;
+        }
+        const actual = resolveLangCode(resume.i18n.languages, lang);
+        if (!actual) {
+          return resume;
+        }
+        return { ...approveResumeLanguage(resume, actual), updatedAt: new Date().toISOString() };
+      }),
     }));
     persist(get());
   },

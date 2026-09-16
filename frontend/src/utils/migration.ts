@@ -8,7 +8,7 @@ import { EducationLevel, SkillCategory, SkillLevel, SkillProficiency } from '../
 import type { LangCode, LangVariant, LocalField, LocalListField, LocalText, LocalTextList, ResumeI18n } from '../types/i18n';
 import type { Profile } from '../types/profile';
 import type { Resume, ResumeBasicInfo, ResumeSection, ResumeSectionType } from '../types/resume';
-import { makeField, makeListField, SOURCE_LANGUAGE, SOURCE_LANGUAGE_LABEL } from './i18n';
+import { dedupeProfileLanguages, dedupeResumeLanguages, makeField, makeListField, SOURCE_LANGUAGE, SOURCE_LANGUAGE_LABEL } from './i18n';
 
 export const SNAPSHOT_VERSION = 2;
 
@@ -177,7 +177,7 @@ export function migrateResume(raw: unknown): Resume {
   const source = i18n.sourceLanguage;
   const now = new Date().toISOString();
 
-  return {
+  const migrated: Resume = {
     id: asString(record.id) || `resume_migrated_${Date.now().toString(36)}`,
     title: migrateField(record.title, source),
     templateId: asString(record.templateId) || 'atelier',
@@ -224,6 +224,8 @@ export function migrateResume(raw: unknown): Resume {
       outcomes: migrateListField(item.outcomes, source),
     })),
   };
+  // 合并大小写不同的重复语言（如 en / EN），恢复后即为唯一版本。
+  return dedupeResumeLanguages(migrated);
 }
 
 interface NormalizedItem {
@@ -258,7 +260,7 @@ function clampProficiency(raw: unknown): SkillProficiency {
 export function migrateProfile(raw: unknown): Profile {
   const record = asRecord(raw);
   const source = SOURCE_LANGUAGE;
-  return {
+  const migrated: Profile = {
     fullName: asString(record.fullName),
     headline: migrateField(record.headline, source),
     phone: asString(record.phone),
@@ -269,6 +271,7 @@ export function migrateProfile(raw: unknown): Profile {
     targetRole: migrateField(record.targetRole, source),
     summary: migrateField(record.summary, source),
   };
+  return dedupeProfileLanguages(migrated, ['headline', 'location', 'targetRole', 'summary']);
 }
 
 /** 备份导入入口：无 version 视为 v1；resumes / profile 均过迁移。 */
