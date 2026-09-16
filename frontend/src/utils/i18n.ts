@@ -429,19 +429,12 @@ function mergeListField(field: LocalListField | null | undefined, groups: LangGr
   return { values, stale: tidyStale(stale) };
 }
 
-/** 收集简历所有可翻译字段里实际出现过的语言代码（含未登记在 i18n.languages 中的）。 */
+/** 收集简历所有可翻译字段里实际出现过的语言代码，保留不同大小写/空白写法（不去重）。 */
 function collectResumeFieldCodes(resume: Resume): LangCode[] {
   const codes: LangCode[] = [];
-  const seen = new Set<string>();
   const remember = (field: LocalField | LocalListField) => {
     if (field && typeof field === 'object' && !Array.isArray(field)) {
-      for (const code of Object.keys(field.values ?? {})) {
-        const key = langKey(code);
-        if (!seen.has(key)) {
-          seen.add(key);
-          codes.push(code);
-        }
-      }
+      codes.push(...Object.keys(field.values ?? {}));
     }
   };
   mapResumeFields(

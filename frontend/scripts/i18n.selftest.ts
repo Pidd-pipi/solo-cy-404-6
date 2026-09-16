@@ -233,6 +233,42 @@ assert.deepStrictEqual(mergedResp.value, ['Duty A']);
 assert.strictEqual(mergedResp.isStale, true, '列表冲突也标记待复核');
 ok('备份恢复：重复代码合并，保留非空译文与待复核，冲突不丢内容');
 
+// 15b. 仅存在于字段里、未登记语言列表的大小写孤儿写法也要并组并标冲突
+const orphanRaw = {
+  id: 'orphan-1',
+  title: '',
+  templateId: 'atelier',
+  createdAt: '2024-01-01T00:00:00.000Z',
+  updatedAt: '2024-01-01T00:00:00.000Z',
+  i18n: { languages: [{ code: ZH, label: '中文' }], sourceLanguage: ZH },
+  basicInfo: { fullName: '', headline: '', phone: '', email: '', location: '', website: '' },
+  summary: '',
+  sections: [],
+  workExperiences: [],
+  educations: [],
+  skills: [],
+  projects: [
+    {
+      id: 'p1',
+      name: { values: { fr: 'fr-valeur', FR: 'FR-VALEUR' } }, // 两个写法都未登记
+      role: '',
+      startDate: '',
+      endDate: '',
+      techStack: [],
+      description: { values: { fr: 'seul' } },
+      outcomes: [],
+    },
+  ],
+};
+const orphanMerged = migrateResume(orphanRaw);
+assert.deepStrictEqual(orphanMerged.i18n.languages.map((l) => l.code), [ZH, 'fr'], '孤儿语言被补登为一个规范代码');
+const orphanName = orphanMerged.projects[0].name as { values: Record<string, string>; stale?: Record<string, true> };
+const orphanDesc = orphanMerged.projects[0].description as { values: Record<string, string>; stale?: Record<string, true> };
+assert.strictEqual(orphanName.values.fr, 'fr-valeur');
+assert.strictEqual(orphanName.stale?.fr, true, '孤儿写法冲突 -> 待复核，内容不丢失');
+assert.strictEqual(orphanDesc.stale?.fr, undefined, '孤儿单一写法不误标');
+ok('备份恢复：字段里的大小写孤儿写法并组、冲突标记、补登语言');
+
 // 16. 合并幂等：再次去重 / 再迁移不再产生重复或额外待复核
 const mergedAgain = dedupeResumeLanguages(merged);
 assert.deepStrictEqual(mergedAgain.i18n.languages.map((l) => l.code), [ZH, EN]);
