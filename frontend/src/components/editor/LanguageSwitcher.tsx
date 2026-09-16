@@ -39,6 +39,8 @@ export function LanguageSwitcher({ resume, lang, onSelect, onAdd, onRemove, onAp
             <button
               key={variant.code}
               type="button"
+              data-testid={`lang-${variant.code}`}
+              data-active={active ? 'true' : 'false'}
               onClick={() => onSelect(variant.code)}
               className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition ${
                 active
@@ -56,6 +58,7 @@ export function LanguageSwitcher({ resume, lang, onSelect, onAdd, onRemove, onAp
         })}
         <button
           type="button"
+          data-testid="add-lang-toggle"
           onClick={() => setShowAdd((value) => !value)}
           className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--border)] px-3 py-1 text-xs font-semibold text-[var(--muted)] hover:bg-[var(--surface-alt)]"
         >
@@ -67,6 +70,7 @@ export function LanguageSwitcher({ resume, lang, onSelect, onAdd, onRemove, onAp
         {!isSource ? (
           <>
             <Button
+              data-testid="approve-all-lang"
               variant="ghost"
               className="min-h-0 px-2 py-1 text-xs"
               icon={<Check size={13} aria-hidden />}
@@ -76,6 +80,7 @@ export function LanguageSwitcher({ resume, lang, onSelect, onAdd, onRemove, onAp
               全部复核通过{currentStale > 0 ? `（${currentStale}）` : ''}
             </Button>
             <Button
+              data-testid="remove-lang"
               variant="ghost"
               className="min-h-0 px-2 py-1 text-xs text-[var(--danger)]"
               icon={<X size={13} aria-hidden />}
@@ -148,7 +153,7 @@ function AddLanguageForm({
       <div className="grid gap-2 sm:grid-cols-3">
         <label className="space-y-1 text-xs font-medium">
           <span>语言</span>
-          <select className={inputClass} value={presetCode} onChange={(event) => setPresetCode(event.target.value)}>
+          <select data-testid="add-lang-preset" className={inputClass} value={presetCode} onChange={(event) => setPresetCode(event.target.value)}>
             {availablePresets.map((preset) => (
               <option key={preset.code} value={preset.code}>
                 {preset.label}（{preset.code}）
@@ -171,7 +176,7 @@ function AddLanguageForm({
         ) : null}
         <label className="space-y-1 text-xs font-medium">
           <span>从现有版本复制起步</span>
-          <select className={inputClass} value={copyFrom} onChange={(event) => setCopyFrom(event.target.value)}>
+          <select data-testid="add-lang-copyfrom" className={inputClass} value={copyFrom} onChange={(event) => setCopyFrom(event.target.value)}>
             {resume.i18n.languages.map((variant) => (
               <option key={variant.code} value={variant.code}>
                 {variant.label}
@@ -183,7 +188,7 @@ function AddLanguageForm({
       <p className="text-xs text-[var(--muted)]">复制仅作为翻译起点：新语言与源版本内容独立，之后各自修改互不影响。</p>
       {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
       <div className="flex gap-2">
-        <Button className="min-h-0 px-3 py-1.5 text-xs" variant="primary" icon={<Plus size={13} aria-hidden />} onClick={handleSubmit}>
+        <Button data-testid="add-lang-submit" className="min-h-0 px-3 py-1.5 text-xs" variant="primary" icon={<Plus size={13} aria-hidden />} onClick={handleSubmit}>
           添加
         </Button>
         <Button className="min-h-0 px-3 py-1.5 text-xs" variant="ghost" onClick={onCancel}>

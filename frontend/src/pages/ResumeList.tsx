@@ -49,16 +49,16 @@ export function ResumeList() {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">管理多个岗位版本，复制后可保留结构并快速改写内容。</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button icon={<FileJson size={16} aria-hidden />} onClick={handleExportJson}>
+          <Button data-testid="export-json" icon={<FileJson size={16} aria-hidden />} onClick={handleExportJson}>
             导出 JSON
           </Button>
-          <Button icon={<Upload size={16} aria-hidden />} onClick={() => inputRef.current?.click()}>
+          <Button data-testid="import-json" icon={<Upload size={16} aria-hidden />} onClick={() => inputRef.current?.click()}>
             导入
           </Button>
           <Button icon={<FilePlus2 size={16} aria-hidden />} onClick={handleCreate} variant="primary">
             新建简历
           </Button>
-          <input ref={inputRef} className="hidden" type="file" accept="application/json" onChange={handleImportJson} />
+          <input data-testid="import-file" ref={inputRef} className="hidden" type="file" accept="application/json" onChange={handleImportJson} />
         </div>
       </div>
 

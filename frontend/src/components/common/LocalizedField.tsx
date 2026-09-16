@@ -52,10 +52,11 @@ function ownLines(field: LocalListField, lang: LangCode, source: LangCode, isSou
 function StatusRow({ isStale, isFallback, isSource, onApprove }: { isStale: boolean; isFallback: boolean; isSource: boolean; onApprove: () => void }) {
   if (isStale) {
     return (
-      <span className="inline-flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
-        <span className="rounded-sm bg-amber-500/15 px-1.5 py-0.5 font-semibold">待复核</span>
+      <span data-testid="stale-row" className="inline-flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
+        <span data-testid="stale-badge" className="rounded-sm bg-amber-500/15 px-1.5 py-0.5 font-semibold">待复核</span>
         <button
           type="button"
+          data-testid="stale-approve"
           onClick={onApprove}
           className="inline-flex items-center gap-1 rounded-sm border border-amber-500/40 px-1.5 py-0.5 font-semibold hover:bg-amber-500/10"
         >
@@ -65,7 +66,7 @@ function StatusRow({ isStale, isFallback, isSource, onApprove }: { isStale: bool
     );
   }
   if (isFallback && !isSource) {
-    return <span className="text-xs text-[var(--muted)]">未翻译，当前回退显示原文</span>;
+    return <span data-testid="fallback-hint" className="text-xs text-[var(--muted)]">未翻译，当前回退显示原文</span>;
   }
   return null;
 }
@@ -80,7 +81,7 @@ export function LocalizedInput({ field, lang, source, languages, onChange, class
   };
 
   return (
-    <span className="block space-y-1">
+    <span data-testid={ariaLabel ? `field-${ariaLabel}` : undefined} className="block space-y-1">
       <StatusRow isStale={resolved.isStale} isFallback={resolved.isFallback} isSource={isSource} onApprove={() => onChange(approveField(field, lang, source))} />
       <input
         className={`${inputClass} ${className ?? ''}`}
@@ -103,7 +104,7 @@ export function LocalizedTextarea({ field, lang, source, languages, onChange, cl
   };
 
   return (
-    <span className="block space-y-1">
+    <span data-testid={ariaLabel ? `field-${ariaLabel}` : undefined} className="block space-y-1">
       <StatusRow isStale={resolved.isStale} isFallback={resolved.isFallback} isSource={isSource} onApprove={() => onChange(approveField(field, lang, source))} />
       <textarea
         className={`${inputClass} min-h-24 resize-y leading-6 ${className ?? ''}`}
@@ -127,7 +128,7 @@ export function LocalizedLineList({ field, lang, source, languages, onChange, cl
   };
 
   return (
-    <span className="block space-y-1">
+    <span data-testid={ariaLabel ? `field-${ariaLabel}` : undefined} className="block space-y-1">
       <StatusRow isStale={resolved.isStale} isFallback={resolved.isFallback} isSource={isSource} onApprove={() => onChange(approveListField(field, lang, source))} />
       {hint ? <span className="block text-xs text-[var(--muted)]">{hint}</span> : null}
       <textarea

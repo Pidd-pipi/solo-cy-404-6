@@ -108,6 +108,13 @@ const storedResumes = readStorage<unknown[]>(storageKeys.resumes, []).map(migrat
 const initialResumes = storedResumes.length > 0 ? storedResumes : [buildResume('atelier', '产品经理求职简历')];
 const initialActiveResumeId = readStorage<string | null>(storageKeys.activeResumeId, initialResumes[0]?.id ?? null);
 
+// 首次打开（无任何本地数据）时把演示简历落盘，保证刷新 / 直接用 URL 打开
+// 某个简历 id 时数据仍然存在，而不是在内存里另建一份新简历。
+if (storedResumes.length === 0) {
+  writeStorage(storageKeys.resumes, initialResumes);
+  writeStorage(storageKeys.activeResumeId, initialActiveResumeId);
+}
+
 function persist(state: Pick<ResumeState, 'resumes' | 'activeResumeId'>): void {
   writeStorage(storageKeys.resumes, state.resumes);
   writeStorage(storageKeys.activeResumeId, state.activeResumeId);

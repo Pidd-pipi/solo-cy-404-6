@@ -8,6 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "i18n:selftest": "tsc scripts/i18n.selftest.ts --outDir node_modules/.cache/selftest --module commonjs --target ES2020 --esModuleInterop --skipLibCheck --moduleResolution node && node node_modules/.cache/selftest/scripts/i18n.selftest.js",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --headed",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

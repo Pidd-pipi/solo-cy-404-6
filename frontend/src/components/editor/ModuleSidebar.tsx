@@ -45,6 +45,7 @@ export function ModuleSidebar({ sections, activeSectionId, onSelect, onSorted, o
                       <button
                         className="min-w-0 flex-1 truncate text-left text-sm font-semibold"
                         type="button"
+                        data-testid={`section-${section.id}`}
                         onClick={() => onSelect(section.id)}
                       >
                         {getLocal(section.title, lang, source).value}

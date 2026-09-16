@@ -32,6 +32,7 @@ export function ExportSettings({
         <label className="block space-y-2 text-sm font-medium">
           <span>导出版本语言</span>
           <select
+            data-testid="export-lang"
             className="w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm"
             value={lang}
             onChange={(event) => onLangChange(event.target.value)}

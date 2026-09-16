@@ -195,7 +195,7 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
 
   if (template.layout === 'sidebar') {
     return (
-      <article className="min-h-full p-8 shadow-sm" style={style}>
+      <article data-testid="resume-preview" className="min-h-full p-8 shadow-sm" style={style}>
         <div className="grid grid-cols-[190px_1fr] gap-8">
           <aside className="border-r pr-5" style={{ borderColor: template.accent }}>
             {info.avatarUrl ? <img className="mb-4 h-24 w-24 object-cover" src={info.avatarUrl} alt={info.fullName} /> : null}
@@ -217,7 +217,7 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
   }
 
   return (
-    <article className="min-h-full p-8 shadow-sm" style={style}>
+    <article data-testid="resume-preview" className="min-h-full p-8 shadow-sm" style={style}>
       <header className={template.layout === 'editorial' ? 'mb-8 border-b pb-5' : 'mb-7'} style={{ borderColor: template.accent }}>
         <div className="flex items-start justify-between gap-6">
           <div>

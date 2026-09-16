@@ -45,6 +45,19 @@ npm run build
 npm run preview
 ```
 
+## 测试
+
+统一入口（先自动构建，再起 Vite 预览服务器并跑 Chromium E2E）：
+
+```bash
+npm run test:e2e
+```
+
+- 多语言纯函数自检：`npm run i18n:selftest`
+- 页面测试位于 `frontend/e2e/multilingual.spec.ts`，通过真实页面入口驱动，覆盖：语言添加/译文编辑/原文变化/逐字段复核与刷新持久化、列表清空后保持为空、未翻译语言回退原文、原文变化后清空版本进入待复核、导出语言首次继承编辑选择且手动切换不回写编辑页、移出语言后导出回退现存语言、关闭重开保持、复制简历后多语言数据深拷贝独立、备份真实文件导出再导入往返，以及旧版（无多语言数据）备份迁移后可正常打开。
+- 首次运行需安装浏览器：`npx playwright install chromium`。Playwright 会自动复用本机已运行的 28310 预览服务。
+- 无 root 的受限环境可把 Chromium 系统依赖解压到 `~/.local/chromium-libs`，`playwright.config.ts` 会自动通过 `LD_LIBRARY_PATH` 注入。
+
 ## 技术栈
 
 | 分类 | 技术 |
